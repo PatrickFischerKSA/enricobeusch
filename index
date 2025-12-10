@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Capricor — A Think-Backwards Experience</title>
+  <style>
+    :root{
+      --bg:#0f1724; --card:#0b1220; --muted:#9aa4b2; --accent:#9b5cf6; --glass:rgba(255,255,255,0.04);
+      --success:#22c55e; --danger:#ef4444;
+      font-synthesis: none;
+    }
+    html,body{height:100%;}
+    body{
+      margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;
+      background:linear-gradient(180deg,#071026 0%, #071223 40%, #081126 100%); color:#e6eef8;
+      display:flex; align-items:center; justify-content:center; padding:20px;
+    }
+    .app{width:100%; max-width:1100px; display:grid; grid-template-columns:360px 1fr; gap:18px;}
+    .panel{background:linear-gradient(180deg,var(--card), rgba(11,18,32,0.9)); border-radius:14px; padding:18px; box-shadow:0 6px 30px rgba(5,7,12,0.6);}
+    header h1{margin:0;font-size:20px;letter-spacing:0.2px}
+    header p{margin:6px 0 0;color:var(--muted);font-size:13px}
+
+    /* left sidebar */
+    .sidebar{display:flex;flex-direction:column;gap:12px;height:calc(100vh - 80px);}
+    .cases{overflow:auto;padding-right:6px}
+    .case-item{padding:12px;border-radius:10px;cursor:pointer;background:var(--glass);border:1px solid rgba(255,255,255,0.02);}
+    .case-item.active{outline:2px solid rgba(155,92,246,0.14);box-shadow:inset 0 0 0 1px rgba(155,92,246,0.06)}
+    .meta{font-size:13px;color:var(--muted);}
+    .btn{display:inline-block;padding:8px 12px;border-radius:8px;background:linear-gradient(90deg,var(--accent),#6e4ef0);color:white;font-weight:600;border:none;cursor:pointer}
+    .small{font-size:13px;padding:6px 8px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.04);}
+
+    /* main area */
+    .main{display:flex;flex-direction:column;height:calc(100vh - 80px)}
+    .endstate{padding:16px;border-radius:12px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border:1px solid rgba(255,255,255,0.02)}
+    .timeline{margin-top:12px;padding:12px;border-radius:10px;background:rgba(255,255,255,0.02);min-height:120px;overflow:auto}
+    .event{padding:8px;border-radius:8px;background:rgba(0,0,0,0.12);margin-bottom:8px}
+
+    .controls{display:flex;gap:8px;align-items:center;margin-top:12px}
+    input[type=text]{flex:1;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
+    .hints{margin-top:10px;color:var(--muted);font-size:13px}
+    .footer{margin-top:auto;padding-top:12px;display:flex;justify-content:space-between;align-items:center}
+
+    .meter{display:flex;gap:8px;align-items:center}
+    .pill{background:rgba(255,255,255,0.03);padding:6px 10px;border-radius:999px;font-size:13px}
+
+    .result{padding:16px;border-radius:10px;margin-top:12px}
+    .success{background:linear-gradient(90deg, rgba(34,197,94,0.12), rgba(34,197,94,0.04));border:1px solid rgba(34,197,94,0.08);color:var(--success)}
+    .failure{background:linear-gradient(90deg, rgba(239,68,68,0.08), rgba(239,68,68,0.02));border:1px solid rgba(239,68,68,0.06);color:var(--danger)}
+
+    /* responsive */
+    @media (max-width:900px){.app{grid-template-columns:1fr;}.sidebar{height:auto}.main{height:auto}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="panel sidebar">
+      <header>
+        <h1>Capricor</h1>
+        <p>Think‑Backwards Experience — rekonstruiere die Ursachen einer Katastrophe.</p>
+      </header>
+
+      <div class="panel" style="margin-top:12px;flex:1;overflow:hidden;display:flex;flex-direction:column;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <strong>Cases</strong>
+          <button class="small" id="btnReset">Reset</button>
+        </div>
+        <div class="cases" id="casesList"></div>
+      </div>
+
+      <div class="panel" style="margin-top:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div class="meta">Spielstatus</div>
+            <div style="margin-top:6px;">Fehlversuche: <span id="mistakes">0</span>/<span id="maxMistakes">5</span></div>
+          </div>
+          <div class="meter">
+            <div class="pill" id="caseProgress">0/0</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px;text-align:center;color:var(--muted);font-size:13px">
+        <div>Inspiriert von Raphaela Edelbauer — thematisch, nicht wörtlich.</div>
+      </div>
+    </div>
+
+    <div class="panel main">
+      <div class="endstate" id="endState">
+        <strong>Endzustand</strong>
+        <p id="endStateText" style="margin-top:8px">Wähle einen Case, um zu starten.</p>
+      </div>
+
+      <div class="timeline" id="timeline">
+        <strong>Rekonstruierte Timeline (rückwärts)</strong>
+        <div id="timelineList" style="margin-top:8px"></div>
+      </div>
+
+      <div style="margin-top:12px">
+        <div class="meta">Was ist davor passiert?</div>
+        <div class="controls">
+          <input type="text" id="hypothesisInput" placeholder="Formuliere deine Hypothese oder wähle einen Vorschlag" autocomplete="off" />
+          <button class="btn" id="btnSubmit">Prüfen</button>
+        </div>
+        <div class="hints" id="hintBox">Keine Hinweise ausgewählt.</div>
+
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap" id="suggestions"></div>
+
+        <div class="footer">
+          <div style="display:flex;gap:8px;align-items:center">
+            <div class="meta">Fall:</div>
+            <div id="caseTitle">—</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div id="statusTag" class="pill">Bereit</div>
+            <button class="small" id="btnReveal">Lösung zeigen</button>
+          </div>
+        </div>
+
+        <div id="resultBox"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // --- Daten (Cases) ---
+    const CASES = [
+      {
+        id: 'nacht-aktion',
+        title: 'Die Nacht vor der Aktion',
+        end_state_description: 'Polizeiautos vor einem heruntergekommenen Wiener Altbau. Die Wohnung ist verrußt, verbrannte Flugblätter liegen verstreut. Ein Gruppenmitglied wird verletzt abtransportiert.',
+        max_mistakes: 5,
+        // events in chronologischer Reihenfolge (T-4 ... T-0)
+        events: [
+          {
+            id: 'recruit',
+            description: 'Die Gruppe rekrutiert eine neue Person, die Sprengstoff- und Brandtechniken kennt.',
+            hints: ['Neue Person, neues Know‑how', 'jemand bringt technische Expertise mit', 'Bekannte im Umfeld der Gruppe bringt riskante Fähigkeiten ein'],
+            allowed_player_phrasings: ['rekrutiert', 'neues mitglied', 'aufnahme', 'hat jemanden rekrutiert', 'jmd mit sprengstoffkenntnissen']
+          },
+          {
+            id: 'plan_uni',
+            description: 'Aletheia beschließt, während eines internationalen Kongresses die Uni anzugreifen, um maximale Aufmerksamkeit zu erzeugen.',
+            hints: ['Zeitpunkt während Kongress', 'Maximale Aufmerksamkeit als Ziel', 'die Uni als Schauplatz'],
+            allowed_player_phrasings: ['beschliesst die uni anzugreifen', 'angriff auf die uni', 'uni während kongress', 'ziel uni']
+          },
+          {
+            id: 'byproxy_manifest',
+            description: 'Byproxy verändert heimlich das Manifest der Gruppe, um eine radikalere Zielsetzung durchzudrücken.',
+            hints: ['ein manifest wurde manipuliert', 'byproxy handelt heimlich', 'ideologische verschärfung'],
+            allowed_player_phrasings: ['manipuliert manifest', 'byproxy verändert', 'manifest geändert', 'byproxy hat das manifest']
+          },
+          {
+            id: 'streit',
+            description: 'Ein heftiger Streit in Aletheia über die moralische Vertretbarkeit der Aktion eskaliert.',
+            hints: ['Konflikt über moralische Grenze', 'Streit eskaliert', 'spaltung in der gruppe'],
+            allowed_player_phrasings: ['streit', 'eskaliert', 'konflikt', 'moralische vertretbarkeit']
+          },
+          {
+            id: 'probelauf',
+            description: 'Ein missglückter Probelauf mit Molotowcocktails in der Wohnung entzündet einen Brand, der außer Kontrolle gerät.',
+            hints: ['brand in der wohnung', 'molotow probelauf', 'unfall durch experiment'],
+            allowed_player_phrasings: ['probelauf', 'molotow', 'brand', 'test mit molotow']
+          }
+        ]
+      },
+      // Zusätzliche Beispiel-Cases (können erweitert werden)
+      {
+        id: 'fakenews-fall',
+        title: 'Die virale Lüge',
+        end_state_description: 'Eine manipulierte Aufnahme stürzt eine Lokalpolitikerin in die Kritik; Demonstrationen folgen.',
+        max_mistakes: 4,
+        events: [
+          {id:'deepfake', description:'Eine manipulierte Videoaufnahme wird absichtlich veröffentlicht.', hints:['manipuliertes video','aufnahme verändert','deepfake'], allowed_player_phrasings:['manipuliert','deepfake','video veröffentlicht']},
+          {id:'account', description:'Ein anonymer Account verbreitet die Aufnahme gezielt in Callout‑Gruppen.', hints:['anonymer account','gezielte verbreitung','callout gruppen'], allowed_player_phrasings:['anonymer account','verbreitet','geteilt von']},
+          {id:'motive', description:'Eine PR‑Firma will die Politikerin diskreditieren, um eigene Interessen zu fördern.', hints:['PR','interesse','diskreditierung'], allowed_player_phrasings:['pr firma','diskreditieren','fake news kampagne']}
+        ]
+      }
+    ];
+
+    // --- State ---
+    let state = {
+      caseId: null,
+      currentIndex: null, // index of expected event (we go backwards)
+      mistakes: 0,
+      timeline: [], // reconstructed events (push as we go)
+    };
+
+    // --- DOM ---
+    const casesList = document.getElementById('casesList');
+    const endStateText = document.getElementById('endStateText');
+    const timelineList = document.getElementById('timelineList');
+    const mistakesEl = document.getElementById('mistakes');
+    const maxMistakesEl = document.getElementById('maxMistakes');
+    const caseProgress = document.getElementById('caseProgress');
+    const caseTitle = document.getElementById('caseTitle');
+    const hintBox = document.getElementById('hintBox');
+    const suggestionsBox = document.getElementById('suggestions');
+    const btnSubmit = document.getElementById('btnSubmit');
+    const hypothesisInput = document.getElementById('hypothesisInput');
+    const btnReveal = document.getElementById('btnReveal');
+    const resultBox = document.getElementById('resultBox');
+    const statusTag = document.getElementById('statusTag');
+    const btnReset = document.getElementById('btnReset');
+
+    // --- Helpers ---
+    function $(sel){return document.querySelector(sel)}
+
+    function renderCases(){
+      casesList.innerHTML = '';
+      CASES.forEach(c => {
+        const div = document.createElement('div');
+        div.className = 'case-item' + (c.id === state.caseId ? ' active' : '');
+        div.innerHTML = `<strong>${c.title}</strong><div class="meta">${c.end_state_description.slice(0,90)}${c.end_state_description.length>90? '...':''}</div>`;
+        div.onclick = ()=> selectCase(c.id);
+        casesList.appendChild(div);
+      })
+    }
+
+    function selectCase(id){
+      const c = CASES.find(x=>x.id===id);
+      if(!c) return;
+      state.caseId = c.id;
+      state.currentIndex = c.events.length - 1; // we expect last event (T-0?) Wait: events in chronological order -> last is most recent (closest to end).
+      // For backward play, expected event is events[c.events.length-1] then decrement
+      state.mistakes = 0;
+      state.timeline = [];
+      mistakesEl.textContent = state.mistakes;
+      maxMistakesEl.textContent = c.max_mistakes;
+      endStateText.textContent = c.end_state_description;
+      caseTitle.textContent = c.title;
+      updateProgress();
+      renderTimeline();
+      renderSuggestions();
+      renderCases();
+      resultBox.innerHTML = '';
+      hintBox.textContent = 'Keine Hinweise ausgewählt.';
+      statusTag.textContent = 'Läuft';
+      statusTag.style.background='transparent';
+    }
+
+    function updateProgress(){
+      const c = getCase();
+      if(!c) return;
+      const done = state.timeline.length;
+      const total = c.events.length;
+      caseProgress.textContent = `${done}/${total}`;
+    }
+
+    function getCase(){
+      return CASES.find(x=>x.id===state.caseId);
+    }
+
+    function renderTimeline(){
+      timelineList.innerHTML = '';
+      if(state.timeline.length===0){ timelineList.innerHTML = '<div class="meta">Noch nichts rekonstruiert.</div>'; return }
+      state.timeline.forEach(ev=>{
+        const d = document.createElement('div'); d.className='event'; d.textContent = ev.description; timelineList.appendChild(d);
+      })
+    }
+
+    function normalize(text){
+      return text.trim().toLowerCase();
+    }
+
+    function checkHypothesis(text){
+      const c = getCase(); if(!c) return;
+      if(state.currentIndex < 0) return; // already done
+      const expected = c.events[state.currentIndex];
+      const input = normalize(text);
+
+      // direct exact allowed_phrasing match
+      let accepted = expected.allowed_player_phrasings.some(p => input.includes(normalize(p)));
+
+      // fuzzy keyword check: check if at least one keyword from expected appears
+      if(!accepted){
+        const keywords = expected.allowed_player_phrasings.map(p => p.split(/\s+/)).flat().map(k=>normalize(k)).filter(Boolean);
+        const matched = keywords.some(k => input.includes(k) && k.length>2);
+        if(matched) accepted = true;
+      }
+
+      // Additional logic: accept if hypothesis mentions elements from expected description
+      if(!accepted){
+        const descTokens = expected.description.split(/\W+/).map(t=>normalize(t)).filter(Boolean);
+        const matched2 = descTokens.some(t => t.length>3 && input.includes(t));
+        if(matched2) accepted = true;
+      }
+
+      return {accepted, expected};
+    }
+
+    function submitHypothesis(){
+      const text = hypothesisInput.value.trim();
+      if(!text) return;
+      const c = getCase(); if(!c) return;
+      if(state.currentIndex < 0) return;
+
+      const {accepted, expected} = checkHypothesis(text);
+      if(accepted){
+        // correct
+        state.timeline.unshift(expected); // show backwards (latest at top)
+        state.currentIndex -= 1;
+        renderTimeline();
+        updateProgress();
+        hintBox.textContent = 'Korrekt — die Hypothese passt zur rekonstruierten Kette.';
+        hypothesisInput.value = '';
+
+        if(state.currentIndex < 0){
+          // success
+          finishCase(true);
+        }
+      } else {
+        state.mistakes += 1;
+        mistakesEl.textContent = state.mistakes;
+        const remaining = c.max_mistakes - state.mistakes;
+        hintBox.textContent = `Diese Hypothese lässt sich nicht stichhaltig begründen. Versuche Hinweise oder Formulierungen mit konkreten Keywords (z.B. "Molotow", "Manifest", "Rekrutierung"). Restversuche: ${remaining}`;
+        // small heuristic: show a hint from expected
+        showHint(c.events[state.currentIndex]);
+        if(state.mistakes >= c.max_mistakes){
+          finishCase(false);
+        }
+      }
+    }
+
+    function showHint(event){
+      const hint = event.hints[Math.floor(Math.random()*event.hints.length)];
+      hintBox.textContent = hint;
+    }
+
+    function renderSuggestions(){
+      suggestionsBox.innerHTML = '';
+      const c = getCase(); if(!c) return;
+      const expected = c.events[state.currentIndex];
+      // show a few suggested phrasings (including distractors)
+      const pool = [
+        expected.allowed_player_phrasings[0] || expected.description.slice(0,30),
+        'Es gab einen internen Streit',
+        'Jemand manipulierte das Manifest',
+        'Ein Probelauf ging schief'
+      ];
+      pool.forEach(text => {
+        const b = document.createElement('button'); b.className='small'; b.textContent = text; b.onclick = ()=>{ hypothesisInput.value = text; };
+        suggestionsBox.appendChild(b);
+      })
+    }
+
+    function finishCase(success){
+      const c = getCase(); if(!c) return;
+      if(success){
+        resultBox.innerHTML = `<div class="result success"><strong>Fall gelöst.</strong><p>Du hast die Ursache-Kette vollständig rekonstruiert. Beachte: In komplexen Situationen gibt es oft mehrere plausible Erklärungen — dieses Ergebnis ist eine mögliche "innere Wahrheit" dieses Falls.</p></div>`;
+        statusTag.textContent = 'Erfolgreich';
+        statusTag.style.color='var(--success)';
+      } else {
+        // show partial reconstruction + evaluation
+        resultBox.innerHTML = `<div class="result failure"><strong>Fall verloren.</strong><p>Du hast die maximale Anzahl an Fehlversuchen erreicht. Die wahre Kausalkette (chronologisch) war:</p><ol style="margin-top:8px;color:var(--muted)">${c.events.map(e=>`<li>${e.description}</li>`).join('')}</ol></div>`;
+        statusTag.textContent = 'Verloren';
+        statusTag.style.color='var(--danger)';
+      }
+    }
+
+    function revealSolution(){
+      const c = getCase(); if(!c) return;
+      resultBox.innerHTML = `<div class="result" style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03)"><strong>Wahre Kausalkette (chronologisch)</strong><ol style="margin-top:8px;color:var(--muted)">${c.events.map(e=>`<li>${e.description}</li>`).join('')}</ol></div>`;
+    }
+
+    // --- Events ---
+    btnSubmit.onclick = submitHypothesis;
+    hypothesisInput.addEventListener('keydown', e=>{ if(e.key==='Enter') submitHypothesis(); });
+    btnReveal.onclick = revealSolution;
+    btnReset.onclick = ()=>{ if(state.caseId) selectCase(state.caseId); };
+
+    // initial render
+    renderCases();
+    // select first case by default
+    if(CASES.length>0) selectCase(CASES[0].id);
+
+    // small UX: when selecting a case, refresh suggestions; update suggestions each time a hypothesis is checked
+    const origSubmit = submitHypothesis;
+
+    // override to add automatic suggestion refresh
+    function submitHypothesis(){
+      const text = hypothesisInput.value.trim();
+      if(!text) return;
+      const c = getCase(); if(!c) return;
+      if(state.currentIndex < 0) return;
+
+      const {accepted, expected} = checkHypothesis(text);
+      if(accepted){
+        state.timeline.unshift(expected);
+        state.currentIndex -= 1;
+        renderTimeline();
+        updateProgress();
+        hintBox.textContent = 'Korrekt — die Hypothese passt zur rekonstruierten Kette.';
+        hypothesisInput.value = '';
+        renderSuggestions();
+        if(state.currentIndex < 0){ finishCase(true); }
+      } else {
+        state.mistakes += 1;
+        mistakesEl.textContent = state.mistakes;
+        const remaining = c.max_mistakes - state.mistakes;
+        hintBox.textContent = `Diese Hypothese lässt sich nicht stichhaltig begründen. Restversuche: ${remaining}`;
+        showHint(c.events[state.currentIndex]);
+        renderSuggestions();
+        if(state.mistakes >= c.max_mistakes){ finishCase(false); }
+      }
+    }
+
+    // attach replaced function
+    document.getElementById('btnSubmit').onclick = submitHypothesis;
+
+  </script>
+</body>
+</html>
